@@ -7,16 +7,19 @@ def _round_to_multiple(x: int, multiple: int):
     return int(np.ceil(max(1, int(x)) / multiple) * multiple)
 
 
-def _target_size(output_projection: str, canvas_width: int, canvas_height: int, outpaint_scale: float):
-    scale = max(1.0, float(outpaint_scale))
-
+def _base_target_size(output_projection: str, canvas_width: int, canvas_height: int):
     if output_projection == "fisheye_1_1":
-        side = _round_to_multiple(int(max(int(canvas_width), int(canvas_height)) * scale), 64)
+        side = _round_to_multiple(max(int(canvas_width), int(canvas_height)), 64)
         return side, side
 
     height = max(int(canvas_height), int(np.ceil(int(canvas_width) / 2.0)))
-    height = _round_to_multiple(int(height * scale), 64)
+    height = _round_to_multiple(height, 64)
     return height * 2, height
+
+
+def _scaled_target_size(base_w: int, base_h: int, outpaint_scale: float):
+    scale = max(1.0, float(outpaint_scale))
+    return _round_to_multiple(int(base_w * scale), 64), _round_to_multiple(int(base_h * scale), 64)
 
 
 class PanoOutpaintCanvas:
@@ -48,9 +51,13 @@ class PanoOutpaintCanvas:
             raise ValueError(f"Expected IMAGE shape [B,H,W,3], got {tuple(images.shape)}")
 
         batch, in_h, in_w, _ = images.shape
-        out_w, out_h = _target_size(output_projection, canvas_width, canvas_height, outpaint_scale)
+        base_w, base_h = _base_target_size(output_projection, canvas_width, canvas_height)
+        out_w, out_h = _scaled_target_size(base_w, base_h, outpaint_scale)
 
-        fit = min(out_w / in_w, out_h / in_h) * float(source_scale)
+        # Fit the source to the unscaled base canvas first. outpaint_scale then
+        # grows the black outpaint area around that fitted source instead of
+        # enlarging the source along with the canvas.
+        fit = min(base_w / in_w, base_h / in_h) * float(source_scale)
         fit = max(fit, 1e-6)
         resized_w = max(1, min(out_w, int(round(in_w * fit))))
         resized_h = max(1, min(out_h, int(round(in_h * fit))))
@@ -80,8 +87,12 @@ class PanoOutpaintCanvas:
 
         info = (
             f"OK: input={in_w}x{in_h} projection={output_projection} "
-            f"canvas={out_w}x{out_h} source={resized_w}x{resized_h} "
+            f"base={base_w}x{base_h} canvas={out_w}x{out_h} source={resized_w}x{resized_h} "
             f"offset=({left},{top}) source_scale={float(source_scale):.2f} "
             f"outpaint_scale={float(outpaint_scale):.2f}"
         )
         return (canvas.clamp(0, 1), mask, info)
+
+
+NODE_CLASS_MAPPINGS = {"PanoOutpaintCanvas": PanoOutpaintCanvas}
+NODE_DISPLAY_NAME_MAPPINGS = {"PanoOutpaintCanvas": "Pano Outpaint Canvas"}
