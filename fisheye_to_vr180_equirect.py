@@ -44,6 +44,30 @@ def _lens_radius(theta, max_theta, lens_model):
     return theta / max(max_theta, 1e-6)
 
 
+def _resample_360_equirect(frames, out_h, out_w, yaw, horizontal_flip, vertical_flip):
+    batch, in_h, in_w, _ = frames.shape
+    ys = np.arange(out_h, dtype=np.float32)
+    xs = np.arange(out_w, dtype=np.float32)
+    xv, yv = np.meshgrid(xs, ys)
+
+    x_norm = (xv + 0.5) / max(out_w, 1)
+    x_norm = np.mod(x_norm + float(yaw) / 360.0, 1.0)
+    y_norm = (yv + 0.5) / max(out_h, 1)
+
+    if bool(horizontal_flip):
+        x_norm = 1.0 - x_norm
+    if bool(vertical_flip):
+        y_norm = 1.0 - y_norm
+
+    u = np.clip(x_norm * (in_w - 1), 0, in_w - 1)
+    v = np.clip(y_norm * (in_h - 1), 0, in_h - 1)
+
+    outputs = []
+    for i in range(batch):
+        outputs.append(_bilinear_sample(frames[i], u, v).astype(np.float32))
+    return np.stack(outputs, axis=0)
+
+
 class FisheyeToVR180Equirect:
     @classmethod
     def INPUT_TYPES(cls):
@@ -102,8 +126,28 @@ class FisheyeToVR180Equirect:
             raise ValueError(f"Expected IMAGE shape [B,H,W,3], got {tuple(images.shape)}")
 
         batch, in_h, in_w, _ = images.shape
-        out_h = max(1, int(max(in_w, in_h) if bool(use_input_size) else output_height))
-        out_w = out_h if output_mode == "vr180_equirect_1_1" else out_h * 2
+        is_wide_360_input = output_mode == "padded_360_equirect_2_1" and in_w >= in_h * 1.5
+        if output_mode == "vr180_equirect_1_1":
+            out_h = max(1, int(max(in_w, in_h) if bool(use_input_size) else output_height))
+            out_w = out_h
+        elif is_wide_360_input:
+            out_h = max(1, int(in_h if bool(use_input_size) else output_height))
+            out_w = out_h * 2
+        else:
+            out_h = max(1, int(max(in_w, in_h) if bool(use_input_size) else output_height))
+            out_w = out_h * 2
+
+        frames = images.detach().float().clamp(0, 1).cpu().numpy()
+
+        if is_wide_360_input:
+            out_np = _resample_360_equirect(frames, out_h, out_w, yaw, horizontal_flip, vertical_flip)
+            out_t = torch.from_numpy(out_np).to(images.device, dtype=images.dtype).clamp(0, 1)
+            info = (
+                f"OK 2:1->360 equirect: input={in_w}x{in_h} output={out_w}x{out_h} "
+                f"mode={output_mode} yaw={float(yaw):.1f} "
+                f"horizontal_flip={bool(horizontal_flip)} vertical_flip={bool(vertical_flip)}"
+            )
+            return (out_t, info)
 
         ys = np.linspace(0, out_h - 1, out_h, dtype=np.float32)
         xs = np.linspace(0, out_w - 1, out_w, dtype=np.float32)
@@ -162,7 +206,6 @@ class FisheyeToVR180Equirect:
         u = np.clip(u, 0, in_w - 1)
         v = np.clip(v, 0, in_h - 1)
 
-        frames = images.detach().float().clamp(0, 1).cpu().numpy()
         outputs = []
         for i in range(batch):
             sampled = _bilinear_sample(frames[i], u, v).astype(np.float32)
