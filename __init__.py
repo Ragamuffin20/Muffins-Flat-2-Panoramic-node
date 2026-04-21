@@ -4,7 +4,7 @@ NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
 
-def _register(name, display_name, import_func):
+def _register(name, import_func):
     try:
         loaded = import_func()
         if not isinstance(loaded, tuple):
@@ -37,7 +37,7 @@ def _fisheye_nodes():
     return (
         ("FisheyeProjectionOnly", FisheyeProjectionOnly, "Fisheye Projection Only"),
         ("FisheyeLensWarpOnly", FisheyeLensWarpOnly, "Fisheye Lens Warp Only"),
-        ("FisheyeToVR180Equirect", FisheyeToVR180Equirect, "Fisheye 1:1 -> VR180 Equirect"),
+        ("FisheyeToVR180Equirect", FisheyeToVR180Equirect, "apply panoramic"),
     )
 
 
@@ -51,8 +51,8 @@ def _outpaint_nodes():
     )
 
 
-_register("Perspective nodes", "Perspective nodes", _perspective_nodes)
-_register("Fisheye nodes", "Fisheye nodes", _fisheye_nodes)
-_register("Outpaint nodes", "Outpaint nodes", _outpaint_nodes)
+_register("Perspective nodes", _perspective_nodes)
+_register("Fisheye nodes", _fisheye_nodes)
+_register("Outpaint nodes", _outpaint_nodes)
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]

@@ -44,7 +44,19 @@ def _lens_radius(theta, max_theta, lens_model):
     return theta / max(max_theta, 1e-6)
 
 
-def _resample_360_equirect(frames, out_h, out_w, yaw, horizontal_flip, vertical_flip):
+def _panorama_lat_curve(lat, lens_model):
+    lat_norm = np.clip(lat / (np.pi / 2.0), -1.0, 1.0)
+    if lens_model == "equisolid":
+        denom = max(np.sin(np.pi / 4.0), 1e-6)
+        return np.sin(lat / 2.0) / denom
+    if lens_model == "orthographic":
+        return np.sin(lat)
+    if lens_model == "stereographic":
+        return np.tan(lat / 2.0)
+    return lat_norm
+
+
+def _resample_360_equirect(frames, out_h, out_w, yaw, lens_model, horizontal_flip, vertical_flip):
     batch, in_h, in_w, _ = frames.shape
     ys = np.arange(out_h, dtype=np.float32)
     xs = np.arange(out_w, dtype=np.float32)
@@ -52,7 +64,13 @@ def _resample_360_equirect(frames, out_h, out_w, yaw, horizontal_flip, vertical_
 
     x_norm = (xv + 0.5) / max(out_w, 1)
     x_norm = np.mod(x_norm + float(yaw) / 360.0, 1.0)
-    y_norm = (yv + 0.5) / max(out_h, 1)
+    lat = (0.5 - (yv + 0.5) / max(out_h, 1)) * np.pi
+
+    lat_curve = np.clip(_panorama_lat_curve(lat, lens_model), -1.0, 1.0)
+    y_norm = 0.5 - lat_curve * 0.5
+
+    pole_scale = np.clip(np.cos(lat), 0.0, 1.0)
+    x_norm = 0.5 + (x_norm - 0.5) * pole_scale
 
     if bool(horizontal_flip):
         x_norm = 1.0 - x_norm
@@ -140,11 +158,11 @@ class FisheyeToVR180Equirect:
         frames = images.detach().float().clamp(0, 1).cpu().numpy()
 
         if is_wide_360_input:
-            out_np = _resample_360_equirect(frames, out_h, out_w, yaw, horizontal_flip, vertical_flip)
+            out_np = _resample_360_equirect(frames, out_h, out_w, yaw, lens_model, horizontal_flip, vertical_flip)
             out_t = torch.from_numpy(out_np).to(images.device, dtype=images.dtype).clamp(0, 1)
             info = (
-                f"OK 2:1->360 equirect: input={in_w}x{in_h} output={out_w}x{out_h} "
-                f"mode={output_mode} yaw={float(yaw):.1f} "
+                f"OK 2:1 flat->360 equirect prewarp: input={in_w}x{in_h} output={out_w}x{out_h} "
+                f"mode={output_mode} lens={lens_model} yaw={float(yaw):.1f} "
                 f"horizontal_flip={bool(horizontal_flip)} vertical_flip={bool(vertical_flip)}"
             )
             return (out_t, info)
@@ -225,4 +243,4 @@ class FisheyeToVR180Equirect:
 
 
 NODE_CLASS_MAPPINGS = {"FisheyeToVR180Equirect": FisheyeToVR180Equirect}
-NODE_DISPLAY_NAME_MAPPINGS = {"FisheyeToVR180Equirect": "Fisheye 1:1 -> VR180 Equirect"}
+NODE_DISPLAY_NAME_MAPPINGS = {"FisheyeToVR180Equirect": "apply panoramic"}
