@@ -53,28 +53,37 @@ ComfyUI class name: `FisheyeProjectionOnly`
 
 Projects frames into a square fisheye-style view for second-pass processing. It can clamp outside-lens pixels to the edge instead of creating a new black padding region.
 
-### Fisheye 1:1 -> VR180 Equirect
+### Apply Panoramic
 
 ComfyUI class name: `FisheyeToVR180Equirect`
 
-Converts a square 1:1 fisheye image batch into a VR180 equirectangular output.
+Display name: `apply panoramic`
+
+Applies the final panoramic projection step for VR-style viewing. The node has two main uses:
+
+- Convert a square 1:1 fisheye image batch into a VR180 equirectangular output.
+- Convert a wide 2:1 image or video batch into a 360-degree panoramic/equirectangular output with pole-aware panoramic prewarp.
 
 Recommended output mode for a half-sphere 180 viewer:
 
 - `vr180_equirect_1_1`
 
-Alternate output mode for players that expect a full equirectangular container:
+Recommended output mode for 360 panoramic output:
 
 - `padded_360_equirect_2_1`
+
+For 360 panoramic mode, feed the node a 2:1 input such as `1024x512`, `1536x768`, or `2048x1024`. The node detects the wide input and applies the 360 prewarp path instead of the square fisheye path.
 
 Useful controls:
 
 - `fisheye_fov`: usually `180`
-- `lens_model`: `equidistant`, `equisolid`, `orthographic`, or `stereographic`
+- `lens_model`: `equidistant`, `equisolid`, `orthographic`, or `stereographic`; also affects the latitude curve for 360 panoramic prewarp
 - `center_x` / `center_y`: correct off-center fisheye frames
 - `lens_radius`: match the circular fisheye radius inside the square frame
-- `yaw`, `pitch`, `roll`: orientation correction
+- `yaw`, `pitch`, `roll`: orientation correction; `yaw` also rotates 360 panoramic output left/right
 - `horizontal_flip` / `vertical_flip`: mirror correction
+
+For 360 panoramic output, `fisheye_fov`, `center_x`, `center_y`, and `lens_radius` are only relevant to the square fisheye path. Wide 2:1 inputs use the 360 prewarp path.
 
 ### Masked Outpaint Guide Fill
 
@@ -116,7 +125,8 @@ Restart ComfyUI after installing or updating.
 4. Send `canvas_images` into your outpaint/inpaint path.
 5. Send `padding_mask` to the mask input of the outpainting stage.
 6. For a second pass, use `Fisheye Lens Warp Only` or `Fisheye Projection Only` without adding new padding.
-7. To create viewer-ready VR180 output, send the final square fisheye frames into `Fisheye 1:1 -> VR180 Equirect`.
+7. To create viewer-ready VR180 output, send the final square fisheye frames into `apply panoramic` with `vr180_equirect_1_1`.
+8. To create 360 panoramic output, send a 2:1 image or video batch into `apply panoramic` with `padded_360_equirect_2_1`.
 
 ## Support
 
