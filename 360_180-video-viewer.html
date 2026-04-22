@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>180/360 Media Viewer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-top: #0b1322;
+      --bg-bottom: #070d18;
+      --panel: rgba(8, 14, 28, 0.82);
+      --panel-border: rgba(255, 255, 255, 0.14);
+      --text: #eef4ff;
+      --muted: #a7b6ce;
+      --accent: #78ebff;
+      --danger: #ff9b7d;
+      --success: #8dffbd;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top, rgba(120, 235, 255, 0.18), transparent 28%),
+        linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+    }
+
+    #viewerHost,
+    #viewerFallback {
+      position: absolute;
+      inset: 0;
+    }
+
+    #viewerFallback {
+      display: none;
+      place-items: center;
+      background:
+        radial-gradient(circle at center, rgba(120, 235, 255, 0.10), transparent 40%),
+        linear-gradient(180deg, #0a1324, #060b14);
+      text-align: center;
+      padding: 24px;
+      color: var(--muted);
+    }
+
+    #viewerFallback.visible {
+      display: grid;
+    }
+
+    #viewerFallback strong {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--text);
+      font-size: 1.2rem;
+    }
+
+    .hud {
+      position: fixed;
+      z-index: 20;
+      backdrop-filter: blur(14px);
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 18px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.32);
+    }
+
+    .topbar {
+      top: 18px;
+      left: 18px;
+      right: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 18px;
+    }
+
+    .title strong {
+      display: block;
+      font-size: 1rem;
+      letter-spacing: 0.02em;
+    }
+
+    .title span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .toggle-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .toggle-group span {
+      padding: 0 8px 0 4px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      white-space: nowrap;
+    }
+
+    .toggle-button {
+      min-width: 56px;
+      padding: 9px 12px;
+    }
+
+    .toggle-button.active {
+      background: linear-gradient(135deg, rgba(53, 207, 255, 0.92), rgba(120, 235, 255, 0.92));
+      color: #03131d;
+      border-color: transparent;
+      font-weight: 700;
+    }
+
+    button,
+    .file-button {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 14px;
+      font: inherit;
+      line-height: 1;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    button:hover,
+    .file-button:hover {
+      transform: translateY(-1px);
+      background: rgba(120, 235, 255, 0.10);
+      border-color: rgba(120, 235, 255, 0.40);
+    }
+
+    .file-button {
+      background: linear-gradient(135deg, #35cfff, var(--accent));
+      color: #03131d;
+      border-color: transparent;
+      font-weight: 700;
+    }
+
+    .info {
+      left: 18px;
+      bottom: 18px;
+      max-width: min(560px, calc(100vw - 36px));
+      padding: 16px 18px;
+    }
+
+    .info p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+
+    #status {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--accent);
+      font-size: 0.9rem;
+      min-height: 1.2em;
+      word-break: break-word;
+    }
+
+    #dropOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 15;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+
+    #dropOverlay.visible {
+      opacity: 1;
+    }
+
+    .dropCard {
+      width: min(560px, calc(100vw - 32px));
+      padding: 28px;
+      border-radius: 28px;
+      border: 2px dashed rgba(120, 235, 255, 0.55);
+      background: rgba(6, 11, 20, 0.78);
+      text-align: center;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
+    }
+
+    .dropCard strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 1.25rem;
+      color: var(--text);
+    }
+
+    .dropCard span {
+      color: var(--muted);
+    }
+
+    #tapToPlay {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      z-index: 18;
+      transform: translate(-50%, -50%);
+      display: none;
+      border-radius: 999px;
+      padding: 14px 18px;
+      background: rgba(6, 11, 20, 0.9);
+      border: 1px solid rgba(120, 235, 255, 0.45);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
+    }
+
+    #tapToPlay.visible {
+      display: block;
+    }
+
+    #fileInput,
+    #videoAsset,
+    #imageAsset {
+      display: none;
+    }
+
+    @media (max-width: 760px) {
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .actions {
+        width: 100%;
+        justify-content: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="viewerHost"></div>
+    <div id="viewerFallback">
+      <div>
+        <strong>Viewer library did not load</strong>
+        This page is based on an A-Frame style local 360 viewer. Connect to the internet once, reopen this file, and try again.
+      </div>
+    </div>
+  </div>
+
+  <div class="hud topbar">
+    <div class="title">
+      <strong>360 Media Viewer</strong>
+      <span>Views 360 and 180 videos plus panoramic images.</span>
+    </div>
+    <div class="actions">
+      <div class="toggle-group" role="group" aria-label="Projection mode">
+        <span>Mode</span>
+        <button id="mode360Button" class="toggle-button active" type="button">360</button>
+        <button id="mode180Button" class="toggle-button" type="button">180</button>
+      </div>
+      <label class="file-button" for="fileInput">Select Media</label>
+      <button id="playPauseButton" type="button">Play</button>
+      <button id="muteButton" type="button">Mute</button>
+      <button id="resetButton" type="button">Reset</button>
+      <button id="fullscreenButton" type="button">Fullscreen</button>
+      <button id="clearButton" type="button">Clear</button>
+    </div>
+  </div>
+
+  <div class="hud info">
+    <p>Drag and drop a 360 or 180 video or image onto the page, or use Select Media. Mouse drag looks around. Mouse wheel zooms. MP4, WebM, JPG, PNG, and WebP usually work best. Files with names like <code>180</code> or <code>vr180</code> auto-switch to 180 mode, and you can override that with the mode buttons.</p>
+    <div id="status">Loading viewer...</div>
+  </div>
+
+  <div id="dropOverlay">
+    <div class="dropCard">
+      <strong>Drop 180 or 360 media here</strong>
+      <span>Video works best as MP4 or WebM. Images also work.</span>
+    </div>
+  </div>
+
+  <button id="tapToPlay" type="button">Tap to play video</button>
+
+  <input id="fileInput" type="file" accept="image/*,video/*">
+  <video id="videoAsset" crossorigin="anonymous" playsinline webkit-playsinline loop></video>
+  <img id="imageAsset" alt="360 media asset">
+
+  <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+  <script>
+    (function () {
+      const statusEl = document.getElementById('status');
+      const viewerHost = document.getElementById('viewerHost');
+      const viewerFallback = document.getElementById('viewerFallback');
+      const fileInput = document.getElementById('fileInput');
+      const videoAsset = document.getElementById('videoAsset');
+      const imageAsset = document.getElementById('imageAsset');
+      const playPauseButton = document.getElementById('playPauseButton');
+      const muteButton = document.getElementById('muteButton');
+      const resetButton = document.getElementById('resetButton');
+      const fullscreenButton = document.getElementById('fullscreenButton');
+      const clearButton = document.getElementById('clearButton');
+      const mode360Button = document.getElementById('mode360Button');
+      const mode180Button = document.getElementById('mode180Button');
+      const tapToPlay = document.getElementById('tapToPlay');
+      const dropOverlay = document.getElementById('dropOverlay');
+
+      let currentUrl = null;
+      let currentType = null;
+      let currentProjection = '360';
+      let cameraEl = null;
+      let skyEl = null;
+      let videoSphereEl = null;
+      let image180El = null;
+      let video180El = null;
+      let sceneEl = null;
+
+      function setStatus(message, tone) {
+        statusEl.textContent = message;
+        statusEl.style.color = tone === 'error' ? 'var(--danger)' : tone === 'success' ? 'var(--success)' : 'var(--accent)';
+      }
+
+      function updateButtons() {
+        const hasVideo = currentType === 'video';
+        const hasSource = !!currentUrl;
+        playPauseButton.disabled = !hasVideo;
+        muteButton.disabled = !hasVideo;
+        playPauseButton.textContent = hasVideo && !videoAsset.paused ? 'Pause' : 'Play';
+        muteButton.textContent = videoAsset.muted ? 'Unmute' : 'Mute';
+        clearButton.disabled = !hasSource;
+        mode360Button.classList.toggle('active', currentProjection === '360');
+        mode180Button.classList.toggle('active', currentProjection === '180');
+      }
+
+      function revokeCurrentUrl() {
+        if (currentUrl) {
+          URL.revokeObjectURL(currentUrl);
+          currentUrl = null;
+        }
+      }
+
+      function initScene() {
+        sceneEl = document.createElement('a-scene');
+        sceneEl.setAttribute('embedded', '');
+        sceneEl.setAttribute('renderer', 'colorManagement: true; antialias: true');
+        sceneEl.setAttribute('vr-mode-ui', 'enabled: true');
+        sceneEl.setAttribute('device-orientation-permission-ui', 'enabled: true');
+        sceneEl.style.width = '100%';
+        sceneEl.style.height = '100%';
+        sceneEl.style.position = 'absolute';
+        sceneEl.style.inset = '0';
+
+        const assets = document.createElement('a-assets');
+        assets.appendChild(videoAsset);
+        assets.appendChild(imageAsset);
+        sceneEl.appendChild(assets);
+
+        cameraEl = document.createElement('a-entity');
+        cameraEl.setAttribute('camera', 'fov: 80');
+        cameraEl.setAttribute('look-controls', 'reverseMouseDrag: false; reverseTouchDrag: false');
+        cameraEl.setAttribute('wasd-controls', 'enabled: false');
+        cameraEl.setAttribute('position', '0 1.6 0');
+        sceneEl.appendChild(cameraEl);
+
+        skyEl = document.createElement('a-sky');
+        skyEl.setAttribute('color', '#0b1422');
+        skyEl.setAttribute('rotation', '0 -90 0');
+        skyEl.setAttribute('visible', 'false');
+        sceneEl.appendChild(skyEl);
+
+        videoSphereEl = document.createElement('a-videosphere');
+        videoSphereEl.setAttribute('rotation', '0 -90 0');
+        videoSphereEl.setAttribute('visible', 'false');
+        sceneEl.appendChild(videoSphereEl);
+
+        image180El = document.createElement('a-entity');
+        image180El.setAttribute('geometry', 'primitive: sphere; radius: 5000; segmentsWidth: 64; segmentsHeight: 64; phiStart: 90; phiLength: 180; thetaStart: 0; thetaLength: 180');
+        image180El.setAttribute('material', 'shader: flat; side: back; color: #ffffff');
+        image180El.setAttribute('rotation', '0 -90 0');
+        image180El.setAttribute('visible', 'false');
+        sceneEl.appendChild(image180El);
+
+        video180El = document.createElement('a-entity');
+        video180El.setAttribute('geometry', 'primitive: sphere; radius: 5000; segmentsWidth: 64; segmentsHeight: 64; phiStart: 90; phiLength: 180; thetaStart: 0; thetaLength: 180');
+        video180El.setAttribute('material', 'shader: flat; side: back; color: #ffffff');
+        video180El.setAttribute('rotation', '0 -90 0');
+        video180El.setAttribute('visible', 'false');
+        sceneEl.appendChild(video180El);
+
+        viewerHost.appendChild(sceneEl);
+
+        sceneEl.addEventListener('loaded', function () {
+          setStatus('Ready for a file.', 'info');
+          updateButtons();
+        });
+      }
+
+      function ensureViewerReady() {
+        if (!window.AFRAME) {
+          viewerFallback.classList.add('visible');
+          setStatus('A-Frame failed to load. Reopen this file while online.', 'error');
+          return false;
+        }
+        if (!sceneEl) {
+          initScene();
+        }
+        return true;
+      }
+
+      function resetView() {
+        if (!cameraEl) {
+          return;
+        }
+        cameraEl.setAttribute('rotation', '0 0 0');
+        cameraEl.setAttribute('camera', 'fov: 80');
+      }
+
+      function detectProjection(fileName) {
+        return /(?:^|[^0-9])180(?:[^0-9]|$)|vr180/i.test(fileName || '') ? '180' : '360';
+      }
+
+      function syncProjectionSurface() {
+        if (!sceneEl) {
+          return;
+        }
+
+        skyEl.setAttribute('visible', currentType === 'image' && currentProjection === '360');
+        videoSphereEl.setAttribute('visible', currentType === 'video' && currentProjection === '360');
+        image180El.setAttribute('visible', currentType === 'image' && currentProjection === '180');
+        video180El.setAttribute('visible', currentType === 'video' && currentProjection === '180');
+        updateButtons();
+      }
+
+      function setProjectionMode(mode, keepStatus) {
+        currentProjection = mode === '180' ? '180' : '360';
+        syncProjectionSurface();
+        if (currentUrl && !keepStatus) {
+          const mediaLabel = currentType === 'image' ? 'image' : currentType === 'video' ? 'video' : 'media';
+          setStatus('Projection set to ' + currentProjection + ' for the current ' + mediaLabel + '.', 'success');
+        }
+      }
+
+      function clearMedia() {
+        if (currentType === 'video') {
+          videoAsset.pause();
+          videoAsset.removeAttribute('src');
+          videoAsset.load();
+        }
+        if (currentType === 'image') {
+          imageAsset.removeAttribute('src');
+        }
+        skyEl.removeAttribute('src');
+        videoSphereEl.removeAttribute('src');
+        image180El.setAttribute('material', 'shader: flat; side: back; color: #ffffff');
+        video180El.setAttribute('material', 'shader: flat; side: back; color: #ffffff');
+        currentType = null;
+        revokeCurrentUrl();
+        tapToPlay.classList.remove('visible');
+        syncProjectionSurface();
+        setStatus('Ready for a file.', 'info');
+        updateButtons();
+      }
+
+      function loadImage(file) {
+        currentType = 'image';
+        revokeCurrentUrl();
+        currentUrl = URL.createObjectURL(file);
+        imageAsset.src = currentUrl;
+        skyEl.setAttribute('src', '#imageAsset');
+        image180El.setAttribute('material', 'shader: flat; side: back; src: #imageAsset; color: #ffffff');
+        syncProjectionSurface();
+        tapToPlay.classList.remove('visible');
+        setStatus('Viewing ' + currentProjection + ' image: ' + file.name, 'success');
+        updateButtons();
+      }
+
+      function loadVideo(file) {
+        currentType = 'video';
+        revokeCurrentUrl();
+        currentUrl = URL.createObjectURL(file);
+        videoAsset.pause();
+        videoAsset.src = currentUrl;
+        videoAsset.load();
+        videoSphereEl.setAttribute('src', '#videoAsset');
+        video180El.setAttribute('material', 'shader: flat; side: back; src: #videoAsset; color: #ffffff');
+        syncProjectionSurface();
+        setStatus('Loading ' + currentProjection + ' video: ' + file.name, 'info');
+
+        const playPromise = videoAsset.play();
+        if (playPromise && typeof playPromise.then === 'function') {
+          playPromise.then(function () {
+            tapToPlay.classList.remove('visible');
+            setStatus('Viewing ' + currentProjection + ' video: ' + file.name, 'success');
+            updateButtons();
+          }).catch(function () {
+            tapToPlay.classList.add('visible');
+            setStatus('Video loaded. Click Play or Tap to play if autoplay was blocked.', 'info');
+            updateButtons();
+          });
+        } else {
+          setStatus('Viewing video: ' + file.name, 'success');
+          updateButtons();
+        }
+      }
+
+      function handleFile(file) {
+        if (!file) {
+          return;
+        }
+        if (!ensureViewerReady()) {
+          return;
+        }
+
+        const name = file.name || '';
+        const type = file.type || '';
+        const isVideo = type.indexOf('video/') === 0 || /\.(mp4|webm|mov|m4v|ogv)$/i.test(name);
+        const isImage = type.indexOf('image/') === 0 || /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(name);
+        setProjectionMode(detectProjection(name), true);
+
+        if (isVideo) {
+          loadVideo(file);
+          return;
+        }
+        if (isImage) {
+          loadImage(file);
+          return;
+        }
+
+        setStatus('Unsupported file. Try MP4, WebM, JPG, PNG, or WebP.', 'error');
+      }
+
+      function preventDefaults(event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function (eventName) {
+        window.addEventListener(eventName, preventDefaults, false);
+        document.addEventListener(eventName, preventDefaults, false);
+      });
+
+      ['dragenter', 'dragover'].forEach(function (eventName) {
+        window.addEventListener(eventName, function () {
+          dropOverlay.classList.add('visible');
+        }, false);
+      });
+
+      ['dragleave', 'drop'].forEach(function (eventName) {
+        window.addEventListener(eventName, function () {
+          dropOverlay.classList.remove('visible');
+        }, false);
+      });
+
+      window.addEventListener('drop', function (event) {
+        const files = event.dataTransfer && event.dataTransfer.files;
+        if (files && files[0]) {
+          handleFile(files[0]);
+        }
+      }, false);
+
+      fileInput.addEventListener('change', function (event) {
+        const files = event.target.files;
+        if (files && files[0]) {
+          handleFile(files[0]);
+        }
+        fileInput.value = '';
+      });
+
+      playPauseButton.addEventListener('click', function () {
+        if (currentType !== 'video') {
+          setStatus('Choose a video first.', 'error');
+          return;
+        }
+        if (videoAsset.paused) {
+          videoAsset.play().then(function () {
+            tapToPlay.classList.remove('visible');
+            updateButtons();
+          }).catch(function () {
+            tapToPlay.classList.add('visible');
+            setStatus('Playback was blocked. Click Tap to play.', 'error');
+          });
+        } else {
+          videoAsset.pause();
+          updateButtons();
+        }
+      });
+
+      muteButton.addEventListener('click', function () {
+        videoAsset.muted = !videoAsset.muted;
+        updateButtons();
+      });
+
+      mode360Button.addEventListener('click', function () {
+        setProjectionMode('360');
+      });
+
+      mode180Button.addEventListener('click', function () {
+        setProjectionMode('180');
+      });
+
+      tapToPlay.addEventListener('click', function () {
+        videoAsset.play().then(function () {
+          tapToPlay.classList.remove('visible');
+          updateButtons();
+        }).catch(function () {
+          setStatus('The browser still refused playback. Try MP4 or WebM in Chrome or Edge.', 'error');
+        });
+      });
+
+      resetButton.addEventListener('click', resetView);
+      clearButton.addEventListener('click', clearMedia);
+
+      fullscreenButton.addEventListener('click', function () {
+        const el = document.documentElement;
+        if (!document.fullscreenElement) {
+          el.requestFullscreen && el.requestFullscreen();
+        } else if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      });
+
+      videoAsset.addEventListener('pause', updateButtons);
+      videoAsset.addEventListener('play', updateButtons);
+      videoAsset.addEventListener('error', function () {
+        const code = videoAsset.error ? ' (code ' + videoAsset.error.code + ')' : '';
+        setStatus('This browser could not play that video' + code + '. MP4 and WebM are the safest choices.', 'error');
+      });
+
+      window.addEventListener('beforeunload', revokeCurrentUrl);
+
+      if (ensureViewerReady()) {
+        syncProjectionSurface();
+        setStatus('Ready for a file.', 'info');
+        updateButtons();
+      }
+    })();
+  </script>
+</body>
+</html>
