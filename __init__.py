@@ -33,11 +33,14 @@ def _perspective_nodes():
 def _fisheye_nodes():
     from .fisheye_projection_only import FisheyeLensWarpOnly, FisheyeProjectionOnly
     from .fisheye_to_vr180_equirect import FisheyeToVR180Equirect
+    from .vr_nodes import ConvertToVR, EstimateVideoOrientation
 
     return (
         ("FisheyeProjectionOnly", FisheyeProjectionOnly, "Fisheye Projection Only"),
         ("FisheyeLensWarpOnly", FisheyeLensWarpOnly, "Fisheye Lens Warp Only"),
         ("FisheyeToVR180Equirect", FisheyeToVR180Equirect, "apply panoramic"),
+        ("ConvertToVR", ConvertToVR, "Convert To VR / Apply Panoramic"),
+        ("EstimateVideoOrientation", EstimateVideoOrientation, "Estimate Video Orientation"),
     )
 
 

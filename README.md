@@ -2,7 +2,7 @@
 
 ComfyUI custom nodes for preparing flat image or video frames for panoramic, fisheye, and VR180 workflows.
 
-The main use case is an outpainting pipeline: place a flat frame on a larger panoramic or square fisheye canvas, generate the missing surroundings, optionally apply a fisheye crop/warp, then convert the final 1:1 fisheye result into a VR180 equirectangular video that can be viewed in a 180/360 viewer.
+The main use case is an outpainting pipeline: place a flat frame on a larger ratio-locked panoramic canvas, generate the missing surroundings, then apply a 180 or 360 panoramic prewarp so the result unwraps correctly in a VR/equirectangular viewer.
 
 Workflow files are intentionally not included in this repository.
 
@@ -12,16 +12,16 @@ Workflow files are intentionally not included in this repository.
 
 ComfyUI class name: `PanoOutpaintCanvas`
 
-Prepares an image batch on a black panoramic canvas and outputs a mask for the new padded/outpaint area.
+Prepares an image batch on a solid gray panoramic canvas and outputs a mask for the new padded/outpaint area.
 
 Inputs:
 
 - `images`: input `IMAGE` batch
-- `output_projection`: `panorama_2_1` or `fisheye_1_1`
-- `canvas_width`: base canvas width
-- `canvas_height`: base canvas height
+- `vr_format`: `vr180_equirect_1_1` or `padded_360_equirect_2_1`
+- `longest_side`: base size for the ratio-locked canvas
 - `source_scale`: scale for the original source inside the canvas
 - `outpaint_scale`: expands the final canvas while preserving the selected projection ratio
+- `mask_feather`: softens the padding mask inward over the source edge, in pixels
 
 Outputs:
 
@@ -85,6 +85,21 @@ Useful controls:
 
 For 360 panoramic output, `fisheye_fov`, `center_x`, `center_y`, and `lens_radius` are only relevant to the square fisheye path. Wide 2:1 inputs use the 360 prewarp path.
 
+### Convert To VR / Apply Panoramic
+
+ComfyUI class name: `ConvertToVR`
+
+Workflow-facing node that applies panoramic prewarp only. It does not convert from fisheye, does not crop through a lens radius, and does not mask invalid areas to gray or black. It accepts linked `yaw`, `pitch`, and `roll` values and outputs:
+
+- `vr_frames`: prewarped frames for a 180 or 360 viewer
+- `viewer_preview_first_frame`: a single-frame preview batch
+
+### Estimate Video Orientation
+
+ComfyUI class name: `EstimateVideoOrientation`
+
+Estimates `yaw`, `pitch`, and `roll` correction values from a sampled image/video batch. The estimator is dependency-light and uses frame luminance/edge structure, so treat its output as a useful automatic starting point that can still be overridden by hand.
+
 ### Masked Outpaint Guide Fill
 
 ComfyUI class name: `MaskedOutpaintGuideFill`
@@ -121,12 +136,12 @@ Restart ComfyUI after installing or updating.
 
 1. Add `Pano Outpaint Canvas` to your workflow.
 2. Connect an `IMAGE` or video-frame image batch to `images`.
-3. Choose `panorama_2_1` for a 2:1 panoramic canvas or `fisheye_1_1` for a square fisheye-style canvas.
+3. Choose `vr180_equirect_1_1` for a square 180 canvas or `padded_360_equirect_2_1` for a 2:1 360 canvas.
 4. Send `canvas_images` into your outpaint/inpaint path.
 5. Send `padding_mask` to the mask input of the outpainting stage.
 6. For a second pass, use `Fisheye Lens Warp Only` or `Fisheye Projection Only` without adding new padding.
-7. To create viewer-ready VR180 output, send the final square fisheye frames into `apply panoramic` with `vr180_equirect_1_1`.
-8. To create 360 panoramic output, send a 2:1 image or video batch into `apply panoramic` with `padded_360_equirect_2_1`.
+7. Send the finished outpaint frames into `Convert To VR / Apply Panoramic`.
+8. Use `Estimate Video Orientation` when you want automatic yaw, pitch, and roll starting values.
 
 ## Support
 
