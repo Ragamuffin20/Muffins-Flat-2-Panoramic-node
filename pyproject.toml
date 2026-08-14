@@ -1,0 +1,22 @@
+[project]
+name = "muffins-flat-2-panoramic"
+version = "1.0.0"
+description = "Panoramic, fisheye, VR180, and VR360 image/video preparation and projection nodes for ComfyUI."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+]
+classifiers = [
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Repository = "https://github.com/Ragamuffin20/Muffins-Flat-2-Panoramic-node"
+Documentation = "https://github.com/Ragamuffin20/Muffins-Flat-2-Panoramic-node#readme"
+"Bug Tracker" = "https://github.com/Ragamuffin20/Muffins-Flat-2-Panoramic-node/issues"
+
+[tool.comfy]
+PublisherId = "ragamuffin"
+DisplayName = "Muffins Flat 2 Panoramic"
