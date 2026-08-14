@@ -143,6 +143,4 @@ Restart ComfyUI after installing or updating.
 7. Send the finished outpaint frames into `Convert To VR / Apply Panoramic`.
 8. Use `Estimate Video Orientation` when you want automatic yaw, pitch, and roll starting values.
 
-## Support
 
-Support my work on Patreon: [The World of Anatnom](https://www.patreon.com/c/theworldofanatnom?vanity=user)
